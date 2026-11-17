@@ -1,11 +1,4 @@
-# Same app, but Kafka is the hosted Aiven service instead of a local container.
-# SQS is still local (ElasticMQ).
-#   docker compose -f docker-compose.aiven.yml up --build
-#
-# Needs:
-#   ./.env   settings (copy .env.example)
-#   ./certs/{ca.pem,service.cert,service.key}   downloaded from the Aiven console
-# Both are git-ignored and never copied into the image. Certs are mounted read-only at /certs.
+# App against Aiven Kafka, local SQS. Requires ./.env and ./certs (both git-ignored).
 
 x-app: &app
   build: .

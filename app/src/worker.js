@@ -1,16 +1,5 @@
-// SQS worker: pulls jobs off the queue and "fulfils" orders.
-//
-// SQS is a work queue: each message goes to ONE consumer (competing consumers). Run 3 workers
-// and they share the load. Nothing is fanned out.
-//
-// Lifecycle of a message:
-//   ReceiveMessage -> message becomes invisible for the visibility timeout (10s in Terraform)
-//   success        -> DeleteMessage (otherwise it comes back!)
-//   failure        -> don't delete; it reappears after the timeout and is retried
-//   3rd failure    -> SQS moves it to the DLQ (redrive policy maxReceiveCount=3)
-//
-// On success, the worker also announces "payment completed" on Kafka so other services
-// (emails, shipping, analytics...) can react, without the worker knowing who they are.
+// SQS worker: processes order jobs and publishes payment.completed.
+// Failed jobs are not deleted, so SQS retries them and moves them to the DLQ after maxReceiveCount.
 const { ReceiveMessageCommand, DeleteMessageCommand } = require('@aws-sdk/client-sqs');
 const config = require('./config');
 const { sqs } = require('./sqs');
@@ -25,7 +14,7 @@ let running = true;
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function processOrder(order) {
-  await sleep(500); // pretend to charge a card, reserve stock, etc.
+  await sleep(500); // simulated work
   if (order.simulateFailure) {
     throw new Error('simulated failure (payment declined)');
   }
@@ -41,8 +30,7 @@ async function handle(msg) {
     logger.debug({ event: 'sqs.received', ...ctx }, 'job received');
     await processOrder(order);
 
-    // Publish BEFORE deleting the SQS message: if publishing fails, the job is retried,
-    // so the event is never lost (at worst it's sent twice, which is "at least once" again).
+    // Publish before deleting the job so a publish failure causes a retry, not a lost event.
     const payment = {
       orderId: order.orderId,
       customerId: order.customerId,
@@ -76,7 +64,6 @@ async function handle(msg) {
     );
     logger.info({ event: 'sqs.deleted', ...ctx }, 'job done, removed from queue');
   } catch (err) {
-    // warn on early attempts (it will be retried), error on the last one (next stop: DLQ)
     const lastAttempt = attempt >= config.sqs.maxReceiveCount;
     logger[lastAttempt ? 'error' : 'warn'](
       { event: 'job.failed', ...ctx, willRetry: !lastAttempt, err },
@@ -95,7 +82,7 @@ async function main() {
 
   onShutdown(async () => {
     running = false;
-    abort.abort(); // cancel an in-progress 20s long poll so we exit quickly
+    abort.abort(); // cancel the in-flight long poll
     await producer.disconnect();
   });
 
@@ -106,7 +93,7 @@ async function main() {
         new ReceiveMessageCommand({
           QueueUrl: queueUrl,
           MaxNumberOfMessages: 10,
-          WaitTimeSeconds: 20, // long polling: fewer empty responses, cheaper
+          WaitTimeSeconds: 20,
           AttributeNames: ['ApproximateReceiveCount'],
           MessageAttributeNames: ['All'],
         }),

@@ -1,5 +1,4 @@
-// Run cleanup on SIGTERM/SIGINT (docker stop sends SIGTERM) so consumers leave their
-// group cleanly and in-flight work finishes, instead of being killed mid-message.
+// Graceful shutdown on SIGTERM/SIGINT.
 const { logger } = require('./logger');
 
 function onShutdown(cleanup) {

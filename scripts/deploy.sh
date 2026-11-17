@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Tell the EC2 instance to pull the latest image and restart the containers.
-# Uses SSM Run Command, so no SSH keys or open port 22.
+# Pull the latest image and restart containers on EC2 via SSM Run Command.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

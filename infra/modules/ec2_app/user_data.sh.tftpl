@@ -1,10 +1,8 @@
 #!/bin/bash
-# EC2 boot script. Terraform's templatefile() fills in the placeholders before the instance boots.
-# Log: /var/log/user-data.log
+# EC2 bootstrap (rendered by templatefile). Log: /var/log/user-data.log
 set -euxo pipefail
 exec > >(tee -a /var/log/user-data.log) 2>&1
 
-# --- Docker + Compose plugin ---
 dnf install -y docker
 systemctl enable --now docker
 usermod -aG docker ec2-user || true
@@ -15,7 +13,6 @@ curl -fsSL "https://github.com/docker/compose/releases/download/${compose_versio
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 docker compose version
 
-# --- App config ---
 mkdir -p /opt/app
 cd /opt/app
 
@@ -31,7 +28,6 @@ KAFKA_REPLICATION_FACTOR=${kafka_rf}
 SQS_QUEUE_URL=${sqs_queue_url}
 EOF
 
-# One image, four roles. `command` picks which script each container runs.
 cat > docker-compose.yml <<'EOF'
 x-app: &app
   image: ${image}
@@ -57,8 +53,7 @@ services:
     command: ["node", "src/worker.js"]
 EOF
 
-# Redeploy script, also called later by scripts/deploy.sh through SSM.
-# ECR login tokens expire after 12h, so it logs in again every time.
+# Also invoked by scripts/deploy.sh via SSM. Re-logs in each time (ECR tokens expire after 12h).
 cat > deploy.sh <<'EOF'
 #!/bin/bash
 set -euo pipefail
@@ -71,7 +66,7 @@ docker compose ps
 EOF
 chmod +x deploy.sh
 
-# The image might not be pushed yet, so retry for about 10 minutes.
+# Retry for ~10 min in case the image isn't pushed yet.
 for attempt in $(seq 1 30); do
   if /opt/app/deploy.sh; then
     echo "App started"

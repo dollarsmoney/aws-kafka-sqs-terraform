@@ -1,9 +1,4 @@
-// Kafka -> SQS bridge.
-// Consumer group "sqs-forwarder" reads every order event and turns it into a job on the SQS work queue.
-//
-// Delivery semantics: kafkajs commits the offset only after eachMessage resolves. If the SQS send
-// throws, the offset isn't committed and the message is retried. That makes this "at least once",
-// so the worker must handle the occasional duplicate (idempotency).
+// Kafka -> SQS bridge. Offsets commit only after the SQS send succeeds (at-least-once).
 const { SendMessageCommand } = require('@aws-sdk/client-sqs');
 const config = require('./config');
 const { kafka, ensureTopics } = require('./kafka');
@@ -27,7 +22,7 @@ async function main() {
       try {
         order = JSON.parse(message.value.toString());
       } catch {
-        // Retrying a bad (poison) message would block the whole partition forever, so log it and skip it.
+        // Skip poison messages instead of blocking the partition.
         logger.error({ event: 'kafka.message_skipped', reason: 'unparseable', ...where }, 'skipping bad message');
         return;
       }

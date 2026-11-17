@@ -1,5 +1,4 @@
-// HTTP API: accepts orders and publishes an "order created" event to Kafka.
-// It doesn't process anything itself; it only records that the event happened.
+// HTTP API: accepts orders and publishes order.created to Kafka.
 const express = require('express');
 const { randomUUID } = require('node:crypto');
 const config = require('./config');
@@ -11,11 +10,10 @@ const producer = kafka.producer();
 const app = express();
 app.use(express.json());
 
-// Access log: one line per HTTP request, with status and duration.
 app.use((req, res, next) => {
   const start = process.hrtime.bigint();
   res.on('finish', () => {
-    if (req.path === '/health') return; // health checks are noise
+    if (req.path === '/health') return;
     logger.info(
       {
         event: 'http.request',
@@ -51,13 +49,12 @@ app.post('/orders', async (req, res) => {
     customerId,
     amount,
     items,
-    simulateFailure: Boolean(simulateFailure), // set true to watch the message end up in the DLQ
+    simulateFailure: Boolean(simulateFailure), // forces worker failure (DLQ demo)
     createdAt: new Date().toISOString(),
   };
 
   try {
-    // The key decides the partition: every order for the same customer goes to the same
-    // partition, so they're consumed in the order they were produced.
+    // Keyed by customer to keep per-customer ordering.
     const [result] = await producer.send({
       topic: config.kafka.topic,
       messages: [
@@ -111,5 +108,5 @@ async function main() {
 
 main().catch((err) => {
   logger.fatal({ event: 'app.crashed', err }, 'api failed to start');
-  process.exit(1); // Docker's restart policy will start us again
+  process.exit(1);
 });

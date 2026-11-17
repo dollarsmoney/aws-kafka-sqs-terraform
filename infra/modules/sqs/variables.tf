@@ -6,7 +6,7 @@ variable "name" {
 variable "visibility_timeout_seconds" {
   description = "How long a received message stays hidden before it can be retried. Should be longer than your processing time."
   type        = number
-  default     = 10 # short so you can watch retries happen during the demo
+  default     = 10
 }
 
 variable "max_receive_count" {

@@ -1,12 +1,8 @@
-# ─────────────────────────────────────────────────────────────────────────────
-#  Every Kafka topic lives here. New topic = add one line, open a PR,
-#  then `terraform apply`. Apps never create topics themselves.
-# ─────────────────────────────────────────────────────────────────────────────
+# Topic catalog: add a topic here and run terraform apply.
 locals {
   topics = {
-    # name                 = settings
-    "orders.created"     = { partitions = 2, replication = 2 } # api → forwarder, analytics
-    "payments.completed" = { partitions = 2, replication = 2 } # worker → (future consumers)
+    "orders.created"     = { partitions = 2, replication = 2 }
+    "payments.completed" = { partitions = 2, replication = 2 }
   }
 
   default_retention_ms = 259200000 # 3 days
@@ -28,9 +24,7 @@ resource "aiven_kafka_topic" "this" {
   }
 }
 
-# orders.created already exists (the app created it before Terraform managed topics).
-# This adopts it into Terraform state instead of trying to create it again.
-# Safe to delete this block after the first successful apply.
+# Adopts the pre-existing topic into state.
 import {
   to = aiven_kafka_topic.this["orders.created"]
   id = "${var.aiven_project}/${var.kafka_service_name}/orders.created"

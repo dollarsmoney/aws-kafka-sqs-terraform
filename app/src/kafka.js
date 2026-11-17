@@ -1,14 +1,10 @@
 const fs = require('node:fs');
-// We use kafkajs v2's default partitioner on purpose; silence its one-time migration notice.
 process.env.KAFKAJS_NO_PARTITIONER_WARNING ??= '1';
 const { Kafka, logLevel } = require('kafkajs');
 const config = require('./config');
 const { logger, kafkaLogCreator } = require('./logger');
 
-// Three ways to connect:
-//   ssl: false                  -> plaintext (local docker Kafka)
-//   ssl: true                   -> TLS, server checked against Node's CA list (MSK unauthenticated TLS)
-//   ssl: { ca, cert, key }      -> mutual TLS: we also present a client certificate (Aiven)
+// false = plaintext (local), true = TLS (MSK), { ca, cert, key } = mutual TLS (Aiven)
 function buildSsl() {
   const { ssl, sslCaFile, sslCertFile, sslKeyFile } = config.kafka;
   if (!ssl) return false;
@@ -25,19 +21,13 @@ const kafka = new Kafka({
   clientId: config.kafka.clientId,
   brokers: config.kafka.brokers,
   ssl: buildSsl(),
-  logLevel: logLevel.WARN, // kafkajs internals: only warnings/errors, so they don't drown out our logs
+  logLevel: logLevel.WARN,
   logCreator: kafkaLogCreator,
   retry: { initialRetryTime: 300, retries: 10 },
 });
 
-// Called by every role at startup with the topics it uses.
-//
-// Production (KAFKA_CREATE_TOPICS unset/false): topics are owned by Terraform
-// (infra/aiven/topics.tf). The app only CHECKS they exist and fails fast with a clear
-// message if not. Its Kafka user usually isn't even allowed to create topics.
-//
-// Dev convenience (KAFKA_CREATE_TOPICS=true): create missing topics. Used for local
-// Docker Kafka and MSK, where nothing else manages topics in this project.
+// Fails fast if topics are missing. Creates them only when KAFKA_CREATE_TOPICS=true (local dev);
+// otherwise topics are owned by Terraform.
 async function ensureTopics(topics) {
   const { createTopics, partitions, replicationFactor } = config.kafka;
   const admin = kafka.admin();
@@ -65,7 +55,6 @@ async function ensureTopics(topics) {
       });
       logger.info({ event: 'kafka.topics_created', topics: missing, partitions }, 'created missing topics');
     } catch (err) {
-      // Two roles can race to create the same topic; losing the race is fine.
       if (err.type !== 'TOPIC_ALREADY_EXISTS') throw err;
     }
   } finally {

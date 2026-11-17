@@ -9,6 +9,5 @@ terraform {
   }
 }
 
-# Auth: export AIVEN_TOKEN=<token>  (Aiven console → User → Tokens → Generate token)
-# The provider reads it from the environment, so it never goes in a file.
+# Auth via the AIVEN_TOKEN environment variable.
 provider "aiven" {}

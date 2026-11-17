@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# Show recent container logs from the EC2 instance without needing a shell.
 # Usage: scripts/logs.sh [service] [lines]   e.g. scripts/logs.sh worker 50
 set -euo pipefail
 

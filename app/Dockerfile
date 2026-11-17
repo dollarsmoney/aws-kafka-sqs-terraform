@@ -1,4 +1,4 @@
-# One image for all four roles; the container `command` picks which script runs.
+# One image for all roles; the container command selects the role.
 FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./

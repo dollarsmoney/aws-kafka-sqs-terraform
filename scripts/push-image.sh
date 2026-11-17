@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Build the app image for ARM64 (t4g / Graviton) and push it to ECR as :<git-sha> and :latest.
-# Run after `terraform apply -target=module.ecr` (or a full apply).
+# Build the arm64 app image and push it to ECR as :<git-sha> and :latest.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -12,7 +11,6 @@ REGION="${REGION:-${AWS_REGION:-us-east-1}}"
 
 REPO_URL="$(terraform -chdir="$INFRA" output -raw ecr_repository_url 2>/dev/null || true)"
 if [[ -z "$REPO_URL" || "$REPO_URL" == *"No outputs"* ]]; then
-  # Fallback when outputs aren't in state yet (e.g. right after a targeted apply)
   REPO_NAME="${PROJECT:-orders-demo}"
   REPO_URL="$(aws ecr describe-repositories --region "$REGION" --repository-names "$REPO_NAME" \
     --query 'repositories[0].repositoryUri' --output text)"
