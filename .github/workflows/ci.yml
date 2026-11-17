@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  terraform:
+    name: Terraform fmt & validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff
+
+      # No cloud credentials needed: validate only checks syntax, types and references.
+      - name: Validate AWS stack (infra/)
+        working-directory: infra
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: Validate Aiven topics (infra/aiven/)
+        working-directory: infra/aiven
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  app:
+    name: App checks & Docker build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Syntax check
+        run: for f in src/*.js; do node --check "$f"; done
+
+      - name: Load every module (catches bad requires)
+        env:
+          KAFKA_BROKERS: localhost:9092
+          SQS_QUEUE_URL: http://localhost:9324/000000000000/order-jobs
+        run: node -e "['config','logger','kafka','sqs','shutdown'].forEach(m => require('./src/' + m))"
+
+      - name: Build Docker image
+        run: docker build -t orders-pipeline:ci .
