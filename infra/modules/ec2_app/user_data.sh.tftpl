@@ -1,0 +1,83 @@
+#!/bin/bash
+# EC2 boot script. Terraform's templatefile() fills in the placeholders before the instance boots.
+# Log: /var/log/user-data.log
+set -euxo pipefail
+exec > >(tee -a /var/log/user-data.log) 2>&1
+
+# --- Docker + Compose plugin ---
+dnf install -y docker
+systemctl enable --now docker
+usermod -aG docker ec2-user || true
+
+mkdir -p /usr/local/lib/docker/cli-plugins
+curl -fsSL "https://github.com/docker/compose/releases/download/${compose_version}/docker-compose-linux-$(uname -m)" \
+  -o /usr/local/lib/docker/cli-plugins/docker-compose
+chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
+docker compose version
+
+# --- App config ---
+mkdir -p /opt/app
+cd /opt/app
+
+cat > .env <<'EOF'
+AWS_REGION=${region}
+PORT=${app_port}
+KAFKA_BROKERS=${kafka_brokers}
+KAFKA_SSL=true
+ORDERS_TOPIC=${kafka_topic}
+PAYMENTS_TOPIC=payments.completed
+KAFKA_CREATE_TOPICS=true
+KAFKA_REPLICATION_FACTOR=${kafka_rf}
+SQS_QUEUE_URL=${sqs_queue_url}
+EOF
+
+# One image, four roles. `command` picks which script each container runs.
+cat > docker-compose.yml <<'EOF'
+x-app: &app
+  image: ${image}
+  env_file: .env
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  api:
+    <<: *app
+    command: ["node", "src/api.js"]
+    ports: ["${app_port}:${app_port}"]
+  forwarder:
+    <<: *app
+    command: ["node", "src/forwarder.js"]
+  analytics:
+    <<: *app
+    command: ["node", "src/analytics.js"]
+  worker:
+    <<: *app
+    command: ["node", "src/worker.js"]
+EOF
+
+# Redeploy script, also called later by scripts/deploy.sh through SSM.
+# ECR login tokens expire after 12h, so it logs in again every time.
+cat > deploy.sh <<'EOF'
+#!/bin/bash
+set -euo pipefail
+cd /opt/app
+aws ecr get-login-password --region ${region} | docker login --username AWS --password-stdin ${registry}
+docker compose pull
+docker compose up -d --remove-orphans
+docker image prune -f
+docker compose ps
+EOF
+chmod +x deploy.sh
+
+# The image might not be pushed yet, so retry for about 10 minutes.
+for attempt in $(seq 1 30); do
+  if /opt/app/deploy.sh; then
+    echo "App started"
+    exit 0
+  fi
+  echo "Deploy attempt $attempt failed; retrying in 20s"
+  sleep 20
+done
+echo "Gave up starting the app. Push the image, then run scripts/deploy.sh"

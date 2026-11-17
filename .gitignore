@@ -1,0 +1,19 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+crash.log
+
+# Node
+node_modules/
+npm-debug.log*
+
+.DS_Store
+
+# Kafka client certificates (Aiven) - never commit
+app/certs/
+
+# Real env files (templates are *.env.example)
+.env
+!.env.example

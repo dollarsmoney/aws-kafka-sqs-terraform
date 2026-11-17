@@ -1,0 +1,6 @@
+# Copy to terraform.tfvars and edit. terraform.tfvars is git-ignored.
+region  = "us-east-1"
+project = "orders-demo"
+
+# Your public IP + /32. Get it with: curl -s https://checkip.amazonaws.com
+my_ip = "203.0.113.7/32"
