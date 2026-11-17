@@ -1,0 +1,9 @@
+node_modules
+npm-debug.log
+docker-compose.local.yml
+local
+Dockerfile
+.dockerignore
+certs
+.env
+.env.*
