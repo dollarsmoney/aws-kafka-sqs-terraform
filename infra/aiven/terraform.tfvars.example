@@ -1,0 +1,4 @@
+# Copy to terraform.tfvars (git-ignored) and fill in from the Aiven console.
+# Tip: your broker host looks like <service name>-<project name>.<...>.aivencloud.com
+aiven_project      = "my-aiven-project"
+kafka_service_name = "kafka-xxxxxxxx"

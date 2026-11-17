@@ -1,0 +1,38 @@
+# Same app, but Kafka is the hosted Aiven service instead of a local container.
+# SQS is still local (ElasticMQ).
+#   docker compose -f docker-compose.aiven.yml up --build
+#
+# Needs:
+#   ./.env   settings (copy .env.example)
+#   ./certs/{ca.pem,service.cert,service.key}   downloaded from the Aiven console
+# Both are git-ignored and never copied into the image. Certs are mounted read-only at /certs.
+
+x-app: &app
+  build: .
+  restart: unless-stopped
+  depends_on:
+    elasticmq: { condition: service_started }
+  env_file: .env
+  volumes:
+    - ./certs:/certs:ro
+
+services:
+  elasticmq:
+    image: softwaremill/elasticmq-native:1.6.11
+    ports: ["9324:9324", "9325:9325"]
+    volumes:
+      - ./local/elasticmq.conf:/opt/elasticmq.conf:ro
+
+  api:
+    <<: *app
+    command: ["node", "src/api.js"]
+    ports: ["3000:3000"]
+  forwarder:
+    <<: *app
+    command: ["node", "src/forwarder.js"]
+  analytics:
+    <<: *app
+    command: ["node", "src/analytics.js"]
+  worker:
+    <<: *app
+    command: ["node", "src/worker.js"]
